@@ -8,8 +8,7 @@ import time
 import datetime
 import subprocess
 import sqlite3
-
-# 第三方库
+import platform
 import psutil
 
 ###### Document Decription
@@ -120,6 +119,58 @@ class PerfVisual(object):
         self.lastWt = 0
         self.lastTime = None
 
+    def collectSysInfo(self, cmd):
+        """收集系统信息并插入到数据库"""
+        try:
+            # CPU信息
+            cpu_model = platform.processor()
+            cpu_cores = psutil.cpu_count(logical=False)
+            cpu_threads = psutil.cpu_count(logical=True)
+            cpu_freq = psutil.cpu_freq()
+            cpu_base_freq = cpu_freq.min if cpu_freq else 0.0
+            cpu_max_freq = cpu_freq.max if cpu_freq else 0.0
+
+            # 内存信息
+            mem = psutil.virtual_memory()
+            total_memory = mem.total
+            available_memory = mem.available
+            used_memory = mem.used
+            memory_usage = mem.percent
+
+            # 磁盘信息
+            disk = psutil.disk_usage(os.getcwd())
+            disk_total = disk.total
+            disk_available = disk.free
+            disk_used = disk.used
+
+            # 运行环境信息
+            os_version = platform.platform()
+            current_time = datetime.datetime.now()
+            work_dir = os.getcwd()
+
+            # 插入数据到systemInfo表
+            self.db.execute('''
+                INSERT INTO systemInfo (
+                    cpu_model, cpu_cores, cpu_threads,
+                    cpu_base_freq, cpu_max_freq,
+                    total_memory, available_memory, used_memory,
+                    memory_usage, disk_total,
+                    disk_available, disk_used, os_version,
+                    command, current_time, work_dir
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                cpu_model, cpu_cores, cpu_threads,
+                cpu_base_freq, cpu_max_freq,
+                total_memory, available_memory, used_memory,
+                memory_usage, disk_total,
+                disk_available, disk_used, os_version,
+                cmd, current_time, work_dir
+            ))
+            self.db.commit()
+
+        except Exception as e:
+            print(f"Error collecting system info: {e}", file=sys.stderr)
+
     def exec(self, cmd: str, recordDB: str=None):
         """执行监控主流程
 
@@ -133,13 +184,14 @@ class PerfVisual(object):
 
         流程说明：
         1. 初始化数据库连接
-        2. 启动子进程并获取PID
-        3. 进入监控循环：
+        2. 收集系统信息
+        3. 启动子进程并获取PID
+        4. 进入监控循环：
             a. 采集进程指标
             b. 计算IO速度
             c. 输出到控制台
             d. 写入数据库
-        4. 清理资源
+        5. 清理资源
 
         注意：
         - 使用shell=False增强安全性，但要求命令以列表形式传入
@@ -150,6 +202,7 @@ class PerfVisual(object):
           建议后续改进为shlex.split()解析命令
         """
         self.db = self.initDB(recordDB)
+        self.collectSysInfo(cmd)
 
         ## FIXME: since psutil can only record status of shell with
         ## shell=True, here use .split to convert cmdline into a list
@@ -192,7 +245,7 @@ class PerfVisual(object):
 
         功能：
         1. 创建/连接SQLite数据库文件
-        2. 初始化process_stats数据表结构
+        2. 初始化process_stats和systemInfo数据表结构
         3. 配置数据库性能参数
 
         参数：
@@ -214,12 +267,36 @@ class PerfVisual(object):
             dbName = datetime.datetime.now().strftime("%Y%m%d_%H.%M.%S") + ".db"
         conn = sqlite3.connect(dbName)
         c = conn.cursor()
+
+        # 创建process_stats表
         c.execute('''CREATE TABLE IF NOT EXISTS process_stats
-                    (timestamp DATETIME, threads_num INTEGER,
-                    cpu_percent FLOAT, memory_mb REAL,
-                    read_count INTEGER, write_count INTEGER,
-                    read_bytes INTEGER, write_bytes INTEGER,
-                    read_mbps FLOAT, write_mbps FLOAT)''')
+                     (timestamp DATETIME, threads_num INTEGER,
+                     cpu_percent FLOAT, memory_mb REAL,
+                     read_count INTEGER, write_count INTEGER,
+                     read_bytes INTEGER, write_bytes INTEGER,
+                     read_mbps FLOAT, write_mbps FLOAT)''')
+
+        # 创建systemInfo表
+        c.execute('''CREATE TABLE IF NOT EXISTS systemInfo
+                     (cpu_model TEXT,
+                     cpu_cores INTEGER,
+                     cpu_threads INTEGER,
+                     cpu_base_freq FLOAT,
+                     cpu_max_freq FLOAT,
+                     cpu_cache_size TEXT,
+                     total_memory INTEGER,
+                     available_memory INTEGER,
+                     used_memory INTEGER,
+                     memory_usage FLOAT,
+                     disk_type TEXT,
+                     disk_total INTEGER,
+                     disk_available INTEGER,
+                     disk_used INTEGER,
+                     os_version TEXT,
+                     command TEXT,
+                     current_time DATETIME,
+                     work_dir TEXT)''')
+
         conn.commit()
         return conn
 
@@ -231,7 +308,7 @@ class PerfVisual(object):
     def updateDB(self, *info):
         self.db.execute('''INSERT INTO process_stats VALUES
                            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                           info)
+                        info)
         self.db.commit()
 
     def calSpdMB(self, byte: int, intervalSec: float) -> float:
@@ -251,8 +328,7 @@ class PerfVisual(object):
         MB/s = (Δbytes / 间隔时间) / (1024^2)
         采用银行家舍入法避免统计偏差
         """
-        return round(byte / intervalSec / 1024**2)
-
+        return round(byte / intervalSec / 1024**2, 3)
 
 
 class ProcessMonitor(object):
@@ -275,7 +351,6 @@ class ProcessMonitor(object):
             return (now, p.num_threads(), p.cpu_percent(),
                     round(p.memory_info().rss/1024.0**2, 3),
                     p.io_counters())
-
 
 
 ##########################################################################
