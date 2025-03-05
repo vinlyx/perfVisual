@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <!-- 性能可视化仪表盘主页面 -->
-    <title>Performance Visualizer</title>
-    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <title>性能可视化</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
+        /* 保持原有样式不变 */
         body {
             font-family: 'Segoe UI', sans-serif;
             margin: 20px;
@@ -35,6 +34,32 @@
             flex-direction: column;
             gap: 24px;
         }
+        #custom-tooltip {
+            position: absolute;
+            background: #f0f2f5;
+            color: #1e293b;
+            padding: 12px;
+            border-radius: 6px;
+            pointer-events: none;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            border: 1px solid #4a5568;
+            min-width: 200px;
+        }
+        .tooltip-section {
+            margin: 4px 0;
+            padding: 4px 0;
+            border-bottom: 1px solid #4a5568;
+        }
+        .tooltip-section:last-child {
+            border-bottom: none;
+        }
+        .tooltip-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #81e6d9;
+        }
     </style>
 </head>
 <body>
@@ -47,205 +72,285 @@
         </div>
     </div>
 
-    <script>
-        // 主数据库实例
-        let db;
+    <div id="custom-tooltip"></div>
 
-        // 初始化SQL.js
-        window.initSqlJs({
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script>
+        let inSync = false;
+        const tooltip = document.getElementById('custom-tooltip');
+
+        initSqlJs({
             locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
-        }).then(SQL => {
-            document.getElementById('dbFile').addEventListener('change', function(e) {
-                const file = e.target.files[0];
+        }).then(SQL => window.SQL = SQL);
+
+        document.getElementById('dbFile').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            try {
+                const db = await SQL;
                 const reader = new FileReader();
 
-                reader.onload = function() {
+                reader.onload = async function(e) {
                     try {
-                        const Uints = new Uint8Array(reader.result);
-                        db = new SQL.Database(Uints);
-                        processData();
+                        const Uints = new Uint8Array(e.target.result);
+                        const database = new db.Database(Uints);
+
+                        // 清除旧图表
+                        ['chart1', 'chart2', 'chart3'].forEach(chartId => Plotly.purge(chartId));
+
+                        const perfData = database.exec(`
+                            SELECT timestamp, threads_num, cpu_percent, memory_mb,
+                                   read_bytes, write_bytes, read_mbps, write_mbps
+                            FROM process_stats
+                        `);
+
+                        if (!perfData?.[0]?.values) {
+                            throw new Error('数据库查询结果格式无效');
+                        }
+
+                        const data = perfData[0].values.map(row => ({
+                            timestamp: new Date(row[0]),
+                            threadCount: row[1],
+                            cpuUsage: row[2],
+                            memoryUsage: row[3],
+                            readBytes: row[4],
+                            writeBytes: row[5],
+                            readMbps: row[6],
+                            writeMbps: row[7],
+                            // 统一数据结构方便所有图表访问
+                            customdata: {
+                                timestamp: row[0],
+                                threadCount: row[1],
+                                cpuUsage: row[2],
+                                memoryUsage: row[3],
+                                readBytes: row[4],
+                                writeBytes: row[5],
+                                readMbps: row[6],
+                                writeMbps: row[7]
+                            }
+                        }));
+
+                        createCharts(data);
+                        if (typeof setupChartHoverSync === 'function') {
+                            setupChartHoverSync();
+                        }
                     } catch (error) {
-                        console.error('数据库加载失败:', error);
+                        alert('文件处理失败: ' + error.message);
                     }
                 };
                 reader.readAsArrayBuffer(file);
-            });
+            } catch (error) {
+                alert('数据库初始化失败: ' + error.message);
+            }
         });
 
-        /**
-         * 处理数据库数据并生成可视化图表
-         * 1. 执行SQL查询获取性能数据
-         * 2. 转换数据格式供图表使用
-         * 3. 调用图表生成函数
-         */
-        function processData() {
-            try {
-                // 执行SQL查询获取原始性能数据
-                const perfData = db.exec(`SELECT
-                    timestamp,
-                    threads_num,
-                    cpu_percent,
-                    memory_mb,
-                    read_bytes,
-                    write_bytes,
-                    read_mbps,
-                    write_mbps
-                FROM process_stats`);
-                const rows = perfData[0]?.values;
-
-                if (!rows) {
-                    alert('数据库格式不符合要求');
-                    return;
-                }
-
-                // 处理数据
-                const data = rows.map(row => ({
-                    timestamp: new Date(row[0]),
-                    threadCount: row[1],
-                    cpuUsage: row[2],
-                    memoryUsage: row[3],
-                    readBytes: row[4],
-                    writeBytes: row[5],
-                    readMbps: row[6],
-                    writeMbps: row[7]
-                }));
-
-                // 生成图表数据
-                createCharts(data);
-            } catch (error) {
-                console.error('数据查询失败:', error);
-            }
-        }
-
-        /**
-         * 创建可视化图表
-         * @param {Array} data - 处理后的性能数据数组
-         * 包含以下字段:
-         * - timestamp: 时间戳
-         * - threadCount: 线程数
-         * - cpuUsage: CPU使用率
-         * - memoryUsage: 内存使用量
-         * - readBytes: 读取字节数
-         * - writeBytes: 写入字节数
-         * - readMbps: 读取速度
-         * - writeMbps: 写入速度
-         */
         function createCharts(data) {
-            // 通用配置
             const layout = {
-                hovermode: 'closest',
+                hovermode: 'x unified',
                 plot_bgcolor: '#f8f9fa',
                 paper_bgcolor: '#ffffff',
                 margin: {t: 30, r: 30, l: 50, b: 40},
                 font: {family: 'Segoe UI', size: 12},
-                xaxis: {
-                    showgrid: true,
-                    gridcolor: '#e5e7eb'
-                },
-                yaxis: {
-                    showgrid: true,
-                    gridcolor: '#e5e7eb'
-                }
+                xaxis: {showgrid: true, gridcolor: '#e5e7eb'},
+                yaxis: {showgrid: true, gridcolor: '#e5e7eb'}
             };
 
             // 图表1：线程/CPU/内存
-            const trace1 = {
-                x: data.map(d => d.timestamp),
-                y: data.map(d => d.threadCount),
-                name: '线程数',
-                type: 'scatter',
-                line: {color: '#6366f1'}
-            };
-
-            const trace2 = {
-                x: data.map(d => d.timestamp),
-                y: data.map(d => d.cpuUsage),
-                name: 'CPU使用率 (%)',
-                type: 'scatter',
-                line: {color: '#10b981'}
-            };
-
-            const trace3 = {
-                x: data.map(d => d.timestamp),
-                y: data.map(d => d.memoryUsage),
-                name: '内存使用量 (MB)',
-                type: 'scatter',
-                line: {color: '#f59e0b'}
-            };
-
-            Plotly.newPlot('chart1', [trace1, trace2, trace3], {
+            Plotly.newPlot('chart1', [
+                {
+                    x: data.map(d => d.timestamp),
+                    y: data.map(d => d.threadCount),
+                    name: '线程数',
+                    type: 'scatter',
+                    line: {color: '#6366f1'}
+                },
+                {
+                    x: data.map(d => d.timestamp),
+                    y: data.map(d => d.cpuUsage),
+                    name: 'CPU使用率 (%)',
+                    type: 'scatter',
+                    line: {color: '#10b981'},
+                    yaxis: 'y2'
+                },
+                {
+                    x: data.map(d => d.timestamp),
+                    y: data.map(d => d.memoryUsage),
+                    name: '内存使用量 (MB)',
+                    type: 'scatter',
+                    line: {color: '#f59e0b'}
+                }
+            ],
+            {
                 ...layout,
-                title: '系统资源使用情况',
-                yaxis: {title: '数值'}
+                yaxis2: {
+                    title: 'CPU使用率 (%)',
+                    overlaying: 'y',
+                    side: 'right',
+                    showgrid: false
+                }
             });
 
-            // 图表2：读取数据
-            const readMB = data.map(d => d.readBytes / (1024 * 1024)).map(v => v.toFixed(2));
-            const readSpeed = data.map(d => d.readMbps);
+            // 图表2：磁盘IO
+            Plotly.newPlot('chart2', [
+                {
+                    x: data.map(d => d.timestamp),
+                    y: data.map(d => d.readMbps),
+                    name: '读取速度 (MB/s)',
+                    type: 'scatter',
+                    line: {color: '#3b82f6'}
+                },
+                {
+                    x: data.map(d => d.timestamp),
+                    y: data.map(d => d.writeMbps),
+                    name: '写入速度 (MB/s)',
+                    type: 'scatter',
+                    line: {color: '#ef4444'}
+                }
+            ], layout);
 
-            const trace4 = {
-                x: data.map(d => d.timestamp),
-                y: readMB,
-                name: '读取数据量 (MB)',
-                type: 'scatter',
-                line: {color: '#3b82f6'}
-            };
+            // 图表3：网络IO
+            Plotly.newPlot('chart3', [
+                {
+                    x: data.map(d => d.timestamp),
+                    y: data.map(d => d.readBytes),
+                    name: '读取字节数',
+                    type: 'scatter',
+                    line: {color: '#8b5cf6'}
+                },
+                {
+                    x: data.map(d => d.timestamp),
+                    y: data.map(d => d.writeBytes),
+                    name: '写入字节数',
+                    type: 'scatter',
+                    line: {color: '#f97316'}
+                }
+            ], layout);
 
-            const trace5 = {
-                x: data.map(d => d.timestamp),
-                y: readSpeed,
-                name: '读取速度 (MB/s)',
-                type: 'scatter',
-                line: {color: '#8b5cf6'}
-            };
+            // 添加悬停事件监听
+            ['chart1', 'chart2', 'chart3'].forEach(chartId => {
+                const chartNode = document.getElementById(chartId);
 
-            Plotly.newPlot('chart2', [trace4, trace5], {
-                ...layout,
-                title: '数据读取性能',
-                yaxis: {title: '数值'}
-            });
+                // 初始化悬停线（保持原有布局形状）
+                let hoverLine = {
+                    x0: 0,
+                    x1: 0,
+                    y0: 0,
+                    y1: 1,
+                    type: 'line',
+                    xref: 'x',
+                    yref: 'paper',
+                    line: {
+                        color: '#81e6d9',
+                        width: 2,
+                        dash: 'solid'
+                    },
+                    visible: false
+                };
 
-            // 图表3：写入数据
-            const writeMB = data.map(d => d.writeBytes / (1024 * 1024)).map(v => v.toFixed(2));
-            const writeSpeed = data.map(d => d.writeMbps);
+                // 添加悬停线到布局
+                Plotly.relayout(chartId, {
+                    shapes: [hoverLine]
+                });
 
-            const trace6 = {
-                x: data.map(d => d.timestamp),
-                y: writeMB,
-                name: '写入数据量 (MB)',
-                type: 'scatter',
-                line: {color: '#ef4444'}
-            };
+                chartNode.on('plotly_hover', function(data) {
+                    const xVal = data.points[0].x;
+                    const pointData = data.points[0].fullData.customdata.find(d => d.timestamp === xVal);
+                    const mouseEvent = data.event;
 
-            const trace7 = {
-                x: data.map(d => d.timestamp),
-                y: writeSpeed,
-                name: '写入速度 (MB/s)',
-                type: 'scatter',
-                line: {color: '#f97316'}
-            };
-
-            Plotly.newPlot('chart3', [trace6, trace7], {
-                ...layout,
-                title: '数据写入性能',
-                yaxis: {title: '数值'}
-            });
-
-            // 图表联动
-            const charts = ['chart1', 'chart2', 'chart3'];
-            charts.forEach(chartId => {
-                document.getElementById(chartId).on('plotly_relayout', event => {
-                    if (event['xaxis.range[0]']) {
-                        charts.forEach(otherChartId => {
-                            if (otherChartId !== chartId) {
-                                Plotly.relayout(otherChartId, {
-                                    'xaxis.range': [event['xaxis.range[0]'], event['xaxis.range[1]']]
-                                });
-                            }
+                    // 更新所有图表的悬停线位置
+                    ['chart1', 'chart2', 'chart3'].forEach(targetChartId => {
+                        Plotly.relayout(targetChartId, {
+                            'shapes[0].x0': xVal,
+                            'shapes[0].x1': xVal,
+                            'shapes[0].visible': true
                         });
+                    });
+
+                    // 计算工具提示位置（防止溢出屏幕）
+                    const tipWidth = 240;
+                    const tipHeight = 280;
+                    let leftPos = mouseEvent.clientX + 15;
+                    let topPos = mouseEvent.clientY + 15;
+
+                    if (leftPos + tipWidth > window.innerWidth) {
+                        leftPos = mouseEvent.clientX - tipWidth - 15;
                     }
+                    if (topPos + tipHeight > window.innerHeight) {
+                        topPos = mouseEvent.clientY - tipHeight - 15;
+                    }
+
+                    // 创建时间格式化器
+                    const timeFormatter = new Intl.DateTimeFormat('zh-CN', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+
+                    // 更新工具提示
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = `${leftPos}px`;
+                    tooltip.style.top = `${topPos}px`;
+                    tooltip.innerHTML = `
+                        <div class="tooltip-section">
+                            <div class="tooltip-title">时间点</div>
+                            ${timeFormatter.format(xVal)}
+                        </div>
+                        <div class="tooltip-section">
+                            <div class="tooltip-title">线程数</div>
+                            ${pointData.threadCount}
+                        </div>
+                        <div class="tooltip-section">
+                            <div class="tooltip-title">CPU使用率</div>
+                            ${pointData.cpuUsage}%
+                        </div>
+                        <div class="tooltip-section">
+                            <div class="tooltip-title">内存使用</div>
+                            ${pointData.memoryUsage} MB
+                        </div>
+                        <div class="tooltip-section">
+                            <div class="tooltip-title">读取速度</div>
+                            ${pointData.readMbps} MB/s
+                        </div>
+                        <div class="tooltip-section">
+                            <div class="tooltip-title">写入速度</div>
+                            ${pointData.writeMbps} MB/s
+                        </div>
+                    `;
+                });
+
+                chartNode.on('plotly_unhover', function() {
+                    // 隐藏所有悬停线
+                    ['chart1', 'chart2', 'chart3'].forEach(targetChartId => {
+                        Plotly.relayout(targetChartId, {
+                            'shapes[0].visible': false
+                        });
+                    });
+                    tooltip.style.display = 'none';
                 });
             });
+
+        // 将同步函数提升到全局作用域
+        function setupChartHoverSync() {
+            const charts = ['chart1', 'chart2', 'chart3'];
+            charts.forEach(chartId => {
+                const chart = document.getElementById(chartId);
+                chart.on('plotly_hover', function(event) {
+                    charts.filter(id => id !== chartId).forEach(otherChartId => {
+                        Plotly.Fx.hover(otherChartId, event.points.map(p => ({
+                            curveNumber: p.curveNumber,
+                            pointNumber: p.pointNumber
+                        })));
+                    });
+                });
+            });
+        }
+
+            // 初始化图表同步功能
+            setupChartHoverSync();
         }
     </script>
 </body>
