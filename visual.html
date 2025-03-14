@@ -88,13 +88,17 @@
             if (!file) return;
 
             try {
-                const db = await SQL;
+                const SQLInstance = await SQL;
                 const reader = new FileReader();
+                let database;
+                // 正确初始化数据库时应使用SQL构造函数
+                // 后续在reader.onload中改为：
+                // database = new SQLInstance.Database(Uints);
 
                 reader.onload = async function(e) {
                     try {
                         const Uints = new Uint8Array(e.target.result);
-                        const database = new db.Database(Uints);
+                        const database = new SQLInstance.Database(Uints);
 
                         // 清除旧图表
                         ['chart1', 'chart2', 'chart3'].forEach(chartId => Plotly.purge(chartId));
@@ -335,22 +339,31 @@
 
         // 将同步函数提升到全局作用域
         function setupChartHoverSync() {
-            const charts = ['chart1', 'chart2', 'chart3'];
-            charts.forEach(chartId => {
-                const chart = document.getElementById(chartId);
-                chart.on('plotly_hover', function(event) {
-                    charts.filter(id => id !== chartId).forEach(otherChartId => {
-                        Plotly.Fx.hover(otherChartId, event.points.map(p => ({
-                            curveNumber: p.curveNumber,
-                            pointNumber: p.pointNumber
-                        })));
+            ['chart1', 'chart2', 'chart3'].forEach(chartId => {
+                const chartNode = document.getElementById(chartId);
+                chartNode.on('plotly_hover', function(eventData) {
+                    const xVal = eventData.points[0].x;
+                    ['chart1', 'chart2', 'chart3'].forEach(targetChartId => {
+                        if (targetChartId === chartId) return;
+                        Plotly.relayout(targetChartId, {
+                            'shapes[0].x0': xVal,
+                            'shapes[0].x1': xVal,
+                            'shapes[0].visible': true
+                        });
+                    });
+                });
+                chartNode.on('plotly_unhover', function() {
+                    ['chart1', 'chart2', 'chart3'].forEach(targetChartId => {
+                        Plotly.relayout(targetChartId, {
+                            'shapes[0].visible': false
+                        });
                     });
                 });
             });
         }
 
-            // 初始化图表同步功能
-            setupChartHoverSync();
+        // 初始化图表同步功能
+        setupChartHoverSync();
         }
     </script>
 </body>
