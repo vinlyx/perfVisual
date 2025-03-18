@@ -25,7 +25,7 @@
             margin: 20px 0;
             padding: 12px;
             background: #fff;
-            border: 2px dashed #6366f1;
+            border: 2px dashed #8aedc2;
             border-radius: 8px;
             width: 300px;
         }
@@ -34,31 +34,19 @@
             flex-direction: column;
             gap: 24px;
         }
-        #custom-tooltip {
-            position: absolute;
-            background: #f0f2f5;
-            color: #1e293b;
-            padding: 12px;
-            border-radius: 6px;
-            pointer-events: none;
-            display: none;
-            z-index: 1000;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            border: 1px solid #4a5568;
-            min-width: 200px;
-        }
         .tooltip-section {
             margin: 4px 0;
             padding: 4px 0;
-            border-bottom: 1px solid #4a5568;
+            border-bottom: 1px solid #718096 !important;
         }
         .tooltip-section:last-child {
             border-bottom: none;
         }
         .tooltip-title {
             font-weight: 600;
-            margin-bottom: 4px;
-            color: #81e6d9;
+            margin-bottom: 8px;
+            color: #63b3ed !important;
+            font-weight: 600;
         }
     </style>
 </head>
@@ -67,18 +55,12 @@
         <input type="file" id="dbFile" accept=".db,.sqlite">
         <div id="charts-container">
             <div class="chart-card" id="chart1"></div>
-            <div class="chart-card" id="chart2"></div>
-            <div class="chart-card" id="chart3"></div>
         </div>
     </div>
-
-    <div id="custom-tooltip"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
     <script>
         let inSync = false;
-        const tooltip = document.getElementById('custom-tooltip');
-
         initSqlJs({
             locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
         }).then(SQL => window.SQL = SQL);
@@ -90,58 +72,31 @@
             try {
                 const SQLInstance = await SQL;
                 const reader = new FileReader();
-                let database;
-                // 正确初始化数据库时应使用SQL构造函数
-                // 后续在reader.onload中改为：
-                // database = new SQLInstance.Database(Uints);
-
                 reader.onload = async function(e) {
-                    try {
-                        const Uints = new Uint8Array(e.target.result);
-                        const database = new SQLInstance.Database(Uints);
+                    const Uints = new Uint8Array(e.target.result);
+                    const database = new SQLInstance.Database(Uints);
 
-                        // 清除旧图表
-                        ['chart1', 'chart2', 'chart3'].forEach(chartId => Plotly.purge(chartId));
+                    Plotly.purge('chart1');
+                    const perfData = database.exec(`
+                        SELECT timestamp, threads_num, cpu_percent, memory_mb,
+                               read_bytes, write_bytes, read_mbps, write_mbps
+                        FROM process_stats
+                    `);
 
-                        const perfData = database.exec(`
-                            SELECT timestamp, threads_num, cpu_percent, memory_mb,
-                                   read_bytes, write_bytes, read_mbps, write_mbps
-                            FROM process_stats
-                        `);
+                    if (!perfData?.[0]?.values) throw new Error('数据库查询结果格式无效');
 
-                        if (!perfData?.[0]?.values) {
-                            throw new Error('数据库查询结果格式无效');
-                        }
+                    const data = perfData[0].values.map((row, index) => ({
+                        timestamp: new Date(row[0]),
+                        threadCount: row[1],
+                        cpuUsage: row[2],
+                        memoryUsage: row[3],
+                        readBytes: (row[4]/1048576).toFixed(2),
+                        writeBytes: (row[5]/1048576).toFixed(2),
+                        readMbps: row[6],
+                        writeMbps: row[7],
+                    }));
 
-                        const data = perfData[0].values.map(row => ({
-                            timestamp: new Date(row[0]),
-                            threadCount: row[1],
-                            cpuUsage: row[2],
-                            memoryUsage: row[3],
-                            readBytes: row[4],
-                            writeBytes: row[5],
-                            readMbps: row[6],
-                            writeMbps: row[7],
-                            // 统一数据结构方便所有图表访问
-                            customdata: {
-                                timestamp: row[0],
-                                threadCount: row[1],
-                                cpuUsage: row[2],
-                                memoryUsage: row[3],
-                                readBytes: row[4],
-                                writeBytes: row[5],
-                                readMbps: row[6],
-                                writeMbps: row[7]
-                            }
-                        }));
-
-                        createCharts(data);
-                        if (typeof setupChartHoverSync === 'function') {
-                            setupChartHoverSync();
-                        }
-                    } catch (error) {
-                        alert('文件处理失败: ' + error.message);
-                    }
+                    createCharts(data);
                 };
                 reader.readAsArrayBuffer(file);
             } catch (error) {
@@ -160,14 +115,16 @@
                 yaxis: {showgrid: true, gridcolor: '#e5e7eb'}
             };
 
-            // 图表1：线程/CPU/内存
-            Plotly.newPlot('chart1', [
+            const traces = [
                 {
                     x: data.map(d => d.timestamp),
                     y: data.map(d => d.threadCount),
                     name: '线程数',
                     type: 'scatter',
-                    line: {color: '#6366f1'}
+                    line: {color: '#6366f1'},
+                    yaxis: 'y',
+                    visible: true,
+                    hoverinfo: `${name}`
                 },
                 {
                     x: data.map(d => d.timestamp),
@@ -175,195 +132,70 @@
                     name: 'CPU使用率 (%)',
                     type: 'scatter',
                     line: {color: '#10b981'},
-                    yaxis: 'y2'
+                    yaxis: 'y',
+                    hoverinfo: `${name}`
                 },
                 {
                     x: data.map(d => d.timestamp),
                     y: data.map(d => d.memoryUsage),
                     name: '内存使用量 (MB)',
                     type: 'scatter',
-                    line: {color: '#f59e0b'}
-                }
-            ],
-            {
-                ...layout,
-                yaxis2: {
-                    title: 'CPU使用率 (%)',
-                    overlaying: 'y',
-                    side: 'right',
-                    showgrid: false
-                }
-            });
-
-            // 图表2：磁盘IO
-            Plotly.newPlot('chart2', [
+                    line: {color: '#f59e0b'},
+                    yaxis: 'y2',
+                    hoverinfo: `${name}`
+                },
                 {
                     x: data.map(d => d.timestamp),
                     y: data.map(d => d.readMbps),
                     name: '读取速度 (MB/s)',
                     type: 'scatter',
-                    line: {color: '#3b82f6'}
+                    line: {color: '#3b82f6'},
+                    yaxis: 'y2',
+                    hoverinfo: `${name}`
                 },
                 {
                     x: data.map(d => d.timestamp),
                     y: data.map(d => d.writeMbps),
                     name: '写入速度 (MB/s)',
                     type: 'scatter',
-                    line: {color: '#ef4444'}
-                }
-            ], layout);
-
-            // 图表3：网络IO
-            Plotly.newPlot('chart3', [
+                    line: {color: '#ef4444'},
+                    yaxis: 'y2',
+                    hoverinfo: `${name}`
+                },
                 {
                     x: data.map(d => d.timestamp),
                     y: data.map(d => d.readBytes),
-                    name: '读取字节数',
+                    name: '读取总量 (MB)',
                     type: 'scatter',
-                    line: {color: '#8b5cf6'}
+                    line: {color: '#8b5cf6'},
+                    yaxis: 'y2',
+                    hoverinfo: `${name}`
                 },
                 {
                     x: data.map(d => d.timestamp),
                     y: data.map(d => d.writeBytes),
-                    name: '写入字节数',
+                    name: '写入总量 (MB)',
                     type: 'scatter',
-                    line: {color: '#f97316'}
+                    line: {color: '#ec4899'},
+                    yaxis: 'y2',
+                    hoverinfo: `${name}`
                 }
-            ], layout);
+            ];
 
-            // 添加悬停事件监听
-            ['chart1', 'chart2', 'chart3'].forEach(chartId => {
-                const chartNode = document.getElementById(chartId);
-
-                // 初始化悬停线（保持原有布局形状）
-                let hoverLine = {
-                    x0: 0,
-                    x1: 0,
-                    y0: 0,
-                    y1: 1,
-                    type: 'line',
-                    xref: 'x',
-                    yref: 'paper',
-                    line: {
-                        color: '#81e6d9',
-                        width: 2,
-                        dash: 'solid'
-                    },
-                    visible: false
-                };
-
-                // 添加悬停线到布局
-                Plotly.relayout(chartId, {
-                    shapes: [hoverLine]
-                });
-
-                chartNode.on('plotly_hover', function(data) {
-                    const xVal = data.points[0].x;
-                    const pointData = data.points[0].fullData.customdata.find(d => d.timestamp === xVal);
-                    const mouseEvent = data.event;
-
-                    // 更新所有图表的悬停线位置
-                    ['chart1', 'chart2', 'chart3'].forEach(targetChartId => {
-                        Plotly.relayout(targetChartId, {
-                            'shapes[0].x0': xVal,
-                            'shapes[0].x1': xVal,
-                            'shapes[0].visible': true
-                        });
-                    });
-
-                    // 计算工具提示位置（防止溢出屏幕）
-                    const tipWidth = 240;
-                    const tipHeight = 280;
-                    let leftPos = mouseEvent.clientX + 15;
-                    let topPos = mouseEvent.clientY + 15;
-
-                    if (leftPos + tipWidth > window.innerWidth) {
-                        leftPos = mouseEvent.clientX - tipWidth - 15;
-                    }
-                    if (topPos + tipHeight > window.innerHeight) {
-                        topPos = mouseEvent.clientY - tipHeight - 15;
-                    }
-
-                    // 创建时间格式化器
-                    const timeFormatter = new Intl.DateTimeFormat('zh-CN', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit'
-                    });
-
-                    // 更新工具提示
-                    tooltip.style.display = 'block';
-                    tooltip.style.left = `${leftPos}px`;
-                    tooltip.style.top = `${topPos}px`;
-                    tooltip.innerHTML = `
-                        <div class="tooltip-section">
-                            <div class="tooltip-title">时间点</div>
-                            ${timeFormatter.format(xVal)}
-                        </div>
-                        <div class="tooltip-section">
-                            <div class="tooltip-title">线程数</div>
-                            ${pointData.threadCount}
-                        </div>
-                        <div class="tooltip-section">
-                            <div class="tooltip-title">CPU使用率</div>
-                            ${pointData.cpuUsage}%
-                        </div>
-                        <div class="tooltip-section">
-                            <div class="tooltip-title">内存使用</div>
-                            ${pointData.memoryUsage} MB
-                        </div>
-                        <div class="tooltip-section">
-                            <div class="tooltip-title">读取速度</div>
-                            ${pointData.readMbps} MB/s
-                        </div>
-                        <div class="tooltip-section">
-                            <div class="tooltip-title">写入速度</div>
-                            ${pointData.writeMbps} MB/s
-                        </div>
-                    `;
-                });
-
-                chartNode.on('plotly_unhover', function() {
-                    // 隐藏所有悬停线
-                    ['chart1', 'chart2', 'chart3'].forEach(targetChartId => {
-                        Plotly.relayout(targetChartId, {
-                            'shapes[0].visible': false
-                        });
-                    });
-                    tooltip.style.display = 'none';
-                });
+            const chart = Plotly.newPlot('chart1', traces, {
+                ...layout,
+                yaxis: {
+                    title: '线程数 / CPU使用率 (%)',
+                    showgrid: true,
+                    gridcolor: '#e5e7eb'
+                },
+                yaxis2: {
+                    title: '内存使用量 (MB) & IO 指标',
+                    overlaying: 'y',
+                    side: 'right',
+                    showgrid: false
+                }
             });
-
-        // 将同步函数提升到全局作用域
-        function setupChartHoverSync() {
-            ['chart1', 'chart2', 'chart3'].forEach(chartId => {
-                const chartNode = document.getElementById(chartId);
-                chartNode.on('plotly_hover', function(eventData) {
-                    const xVal = eventData.points[0].x;
-                    ['chart1', 'chart2', 'chart3'].forEach(targetChartId => {
-                        if (targetChartId === chartId) return;
-                        Plotly.relayout(targetChartId, {
-                            'shapes[0].x0': xVal,
-                            'shapes[0].x1': xVal,
-                            'shapes[0].visible': true
-                        });
-                    });
-                });
-                chartNode.on('plotly_unhover', function() {
-                    ['chart1', 'chart2', 'chart3'].forEach(targetChartId => {
-                        Plotly.relayout(targetChartId, {
-                            'shapes[0].visible': false
-                        });
-                    });
-                });
-            });
-        }
-
-        // 初始化图表同步功能
-        setupChartHoverSync();
         }
     </script>
 </body>
