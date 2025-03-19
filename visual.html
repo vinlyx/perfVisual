@@ -7,19 +7,23 @@
         /* 保持原有样式不变 */
         body {
             font-family: 'Segoe UI', sans-serif;
-            margin: 20px;
+            margin: 0;
+            height: 100vh;
             background: #f0f2f5;
         }
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
+            width: 100%;
+            height: 90vh;
+            padding: 20px;
+            box-sizing: border-box;
         }
         .chart-card {
             background: white;
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 24px;
+            margin-bottom: 0;
             padding: 20px;
+            flex-grow: 1;
         }
         input[type="file"] {
             margin: 20px 0;
@@ -33,20 +37,8 @@
             display: flex;
             flex-direction: column;
             gap: 24px;
-        }
-        .tooltip-section {
-            margin: 4px 0;
-            padding: 4px 0;
-            border-bottom: 1px solid #718096 !important;
-        }
-        .tooltip-section:last-child {
-            border-bottom: none;
-        }
-        .tooltip-title {
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #63b3ed !important;
-            font-weight: 600;
+            height: 100%;
+            padding: 10px;
         }
     </style>
 </head>
@@ -138,9 +130,6 @@
            if (ranges.writeBytes[1] == 0) ranges.writeBytes[1] = 100;
 
            const normByRange = (value, dataRange) => {
-            //   if (dataRange[0] == dataRange[1]) {
-            //       return dataRange[0];
-            //   };
               return (value - dataRange[0]) / (dataRange[1] - dataRange[0]);
            };
            console.log(ranges);
