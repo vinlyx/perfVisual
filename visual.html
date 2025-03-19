@@ -122,82 +122,9 @@
                 return [Math.max(0, min - (max - min)*bufferPercent/100), max + (max - min)*bufferPercent/100];
             };
 
-            const traces = [
-               {
-                   x: data.map(d => d.timestamp),
-                   y: data.map(d => d.threadCount),
-                   name: '线程数',
-                   type: 'scatter',
-                   line: {color: '#6366f1'},
-                   yaxis: 'y',
-                   visible: true,
-                   hoverinfo: 'name+y'
-               },
-               {
-                   x: data.map(d => d.timestamp),
-                   y: data.map(d => d.cpuUsage),
-                   name: 'CPU使用率 (%)',
-                   type: 'scatter',
-                   line: {color: '#10b981'},
-                   yaxis: 'y',
-                   visible: true,
-                   hoverinfo: 'name+y'
-               },
-               {
-                   x: data.map(d => d.timestamp),
-                   y: data.map(d => d.memoryUsage),
-                   name: '内存使用量 (MB)',
-                   type: 'scatter',
-                   line: {color: '#f59e0b'},
-                   yaxis: 'y',
-                   visible: true,
-                   hoverinfo: 'name+y'
-               },
-               {
-                   x: data.map(d => d.timestamp),
-                   y: data.map(d => d.readMbps),
-                   name: '读取速度 (MB/s)',
-                   type: 'scatter',
-                   line: {color: '#3b82f6'},
-                   yaxis: 'y',
-                   visible: true,
-                   hoverinfo: 'name+y'
-               },
-               {
-                   x: data.map(d => d.timestamp),
-                   y: data.map(d => d.writeMbps),
-                   name: '写入速度 (MB/s)',
-                   type: 'scatter',
-                   line: {color: '#ef4444'},
-                   yaxis: 'y',
-                   visible: true,
-                   hoverinfo: 'name+y'
-               },
-               {
-                   x: data.map(d => d.timestamp),
-                   y: data.map(d => d.readBytes),
-                   name: '读取总量 (MB)',
-                   type: 'scatter',
-                   line: {color: '#8b5cf6'},
-                   yaxis: 'y',
-                   visible: true,
-                   hoverinfo: 'name+y'
-               },
-               {
-                   x: data.map(d => d.timestamp),
-                   y: data.map(d => d.writeBytes),
-                   name: '写入总量 (MB)',
-                   type: 'scatter',
-                   line: {color: '#ec4899'},
-                   yaxis: 'y',
-                   visible: true,
-                   hoverinfo: 'name+y'
-               }
-           ];
-
-           // 获取各参数范围
+            // 获取各参数范围
            const ranges = {
-               threadCount: calcRange(data.map(d => d.threadCount), 10),
+               threadCount: calcRange(data.map(d => d.threadCount), 30),
                cpuUsage: calcRange(data.map(d => d.cpuUsage)),
                memoryUsage: calcRange(data.map(d => d.memoryUsage)),
                readMbps: calcRange(data.map(d => d.readMbps)),
@@ -205,12 +132,113 @@
                readBytes: calcRange(data.map(d => d.readBytes)),
                writeBytes: calcRange(data.map(d => d.writeBytes))
            };
+           if (ranges.readMbps[1] == 0) ranges.readMbps[1] = 100;
+           if (ranges.writeMbps[1] == 0) ranges.writeMbps[1] = 100;
+           if (ranges.readBytes[1] == 0) ranges.readBytes[1] = 100;
+           if (ranges.writeBytes[1] == 0) ranges.writeBytes[1] = 100;
+
+           const normByRange = (value, dataRange) => {
+            //   if (dataRange[0] == dataRange[1]) {
+            //       return dataRange[0];
+            //   };
+              return (value - dataRange[0]) / (dataRange[1] - dataRange[0]);
+           };
+           console.log(ranges);
+
+            const traces = [
+               {
+                   x: data.map(d => d.timestamp),
+                   y: data.map(d => normByRange(d.threadCount, ranges.threadCount)),
+                   customdata: data.map(d => d.threadCount),
+                   name: '线程数',
+                   type: 'scatter',
+                   line: {color: '#6366f1'},
+                   yaxis: 'y',
+                   visible: true,
+                   hovertemplate: '线程数: %{customdata}<extra></extra>'
+               },
+               {
+                   x: data.map(d => d.timestamp),
+                   y: data.map(d => normByRange(d.cpuUsage, ranges.cpuUsage)),
+                   customdata: data.map(d => d.cpuUsage),
+                   name: 'CPU使用率 (%)',
+                   type: 'scatter',
+                   line: {color: '#10b981'},
+                   yaxis: 'y',
+                   visible: true,
+                   hovertemplate: 'CPU使用率(%): %{customdata}<extra></extra>'
+               },
+               {
+                   x: data.map(d => d.timestamp),
+                   y: data.map(d => normByRange(d.memoryUsage, ranges.memoryUsage)),
+                   customdata: data.map(d => d.memoryUsage),
+                   name: '内存使用量 (MB)',
+                   type: 'scatter',
+                   line: {color: '#f59e0b'},
+                   yaxis: 'y',
+                   visible: true,
+                   hovertemplate: '内存使用量 (MB): %{customdata}<extra></extra>'
+               },
+               {
+                   x: data.map(d => d.timestamp),
+                   y: data.map(d => normByRange(d.readMbps, ranges.readMbps)),
+                   customdata: data.map(d => d.readMbps),
+                   name: '读取速度 (MB/s)',
+                   type: 'scatter',
+                   line: {color: '#3b82f6'},
+                   yaxis: 'y',
+                   visible: true,
+                   hovertemplate: '读取速度 (MB/s): %{customdata}<extra></extra>'
+               },
+               {
+                   x: data.map(d => d.timestamp),
+                   y: data.map(d => normByRange(d.writeMbps, ranges.writeMbps)),
+                   customdata: data.map(d => d.writeMbps),
+                   name: '写入速度 (MB/s)',
+                   type: 'scatter',
+                   line: {color: '#ef4444'},
+                   yaxis: 'y',
+                   visible: true,
+                   hovertemplate: '写入速度 (MB/s): %{customdata}<extra></extra>'
+               },
+               {
+                   x: data.map(d => d.timestamp),
+                   y: data.map(d => normByRange(d.readBytes, ranges.readBytes)),
+                   customdata: data.map(d => d.readBytes),
+                   name: '读取总量 (MB)',
+                   type: 'scatter',
+                   line: {color: '#8b5cf6'},
+                   yaxis: 'y',
+                   visible: true,
+                   hovertemplate: '读取总量 (MB): %{customdata}<extra></extra>'
+               },
+               {
+                   x: data.map(d => d.timestamp),
+                   y: data.map(d => normByRange(d.writeBytes, ranges.writeBytes)),
+                   customdata: data.map(d => d.writeBytes),
+                   name: '写入总量 (MB)',
+                   type: 'scatter',
+                   line: {color: '#ec4899'},
+                   yaxis: 'y',
+                   visible: true,
+                   hovertemplate: '写入总量 (MB): %{customdata}<extra></extra>'
+               }
+           ];
+
+           const yaxisText = (range, fixed = 2) => {
+                return [
+                    (range[0]).toFixed(fixed),
+                    ((range[0] + range[1])/2).toFixed(fixed),
+                    (range[1]).toFixed(fixed)]
+           };
 
            const chart = Plotly.newPlot('chart1', traces, {
                ...layout,
                yaxis: {
                    title: 'CPU使用率 (%)',
-                   range: ranges.cpuUsage,
+                   range: [0, 1],
+                   tickvals: [0, 0.5, 1],
+                   ticktext: yaxisText(ranges.cpuUsage),
                    showgrid: true,
                    gridcolor: '#e5e7eb'
                },
@@ -219,37 +247,37 @@
                    buttons: [
                        {
                            method: 'relayout',
-                           args: [{'yaxis.title': '线程数', 'yaxis.range': ranges.threadCount}],
+                           args: [{'yaxis.title': '线程数', 'yaxis.ticktext': yaxisText(ranges.threadCount, 0)}],
                            label: '线程数'
                        },
                        {
                            method: 'relayout',
-                           args: [{'yaxis.title': 'CPU使用率 (%)', 'yaxis.range': ranges.cpuUsage}],
+                           args: [{'yaxis.title': 'CPU使用率 (%)', 'yaxis.ticktext': yaxisText(ranges.cpuUsage, 2)}],
                            label: 'CPU使用率'
                        },
                        {
                            method: 'relayout',
-                           args: [{'yaxis.title': '内存使用量 (MB)', 'yaxis.range': ranges.memoryUsage}],
+                           args: [{'yaxis.title': '内存使用量 (MB)', 'yaxis.ticktext': yaxisText(ranges.memoryUsage, 1)}],
                            label: '内存使用量'
                        },
                        {
                            method: 'relayout',
-                           args: [{'yaxis.title': '读取速度 (MB/s)', 'yaxis.range': ranges.readMbps}],
+                           args: [{'yaxis.title': '读取速度 (MB/s)', 'yaxis.ticktext': yaxisText(ranges.readMbps)}],
                            label: '读取速度'
                        },
                        {
                            method: 'relayout',
-                           args: [{'yaxis.title': '写入速度 (MB/s)', 'yaxis.range': ranges.writeMbps}],
+                           args: [{'yaxis.title': '写入速度 (MB/s)', 'yaxis.ticktext': yaxisText(ranges.writeMbps)}],
                            label: '写入速度'
                        },
                        {
                            method: 'relayout',
-                           args: [{'yaxis.title': '读取总量 (MB)', 'yaxis.range': ranges.readBytes}],
+                           args: [{'yaxis.title': '读取总量 (MB)', 'yaxis.ticktext': yaxisText(ranges.readBytes, 1)}],
                            label: '读取总量'
                        },
                        {
                            method: 'relayout',
-                           args: [{'yaxis.title': '写入总量 (MB)', 'yaxis.range': ranges.writeBytes}],
+                           args: [{'yaxis.title': '写入总量 (MB)', 'yaxis.ticktext': yaxisText(ranges.writeBytes, 1)}],
                            label: '写入总量'
                        }
                    ],
