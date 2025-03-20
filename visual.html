@@ -23,6 +23,19 @@
             margin-bottom: 0;
             padding: 20px;
             flex-grow: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .drop-hint {
+            color: #9ca3af;
+            font-size: 24px;
+            pointer-events: none;
+            position: absolute;
+            text-align: center;
+            transition: opacity 0.3s ease;
         }
         .chart-card {
             cursor: pointer;
@@ -93,7 +106,9 @@
     <div class="container">
         <input type="file" id="hiddenFile" accept=".db,.sqlite" style="display: none">
         <div id="charts-container">
-            <div class="chart-card" id="chart1"></div>
+            <div class="chart-card" id="chart1">
+                <div class="drop-hint">点击选择或拖入SQLite数据库</div>
+            </div>
         </div>
     </div>
 
@@ -145,6 +160,7 @@
                         Plotly.react('chart1', traces, layout);
                     } else {
                         createCharts(data);
+                        document.querySelector('.drop-hint').style.opacity = '0';
                         chartCreated = true;
                     }
                 };
@@ -173,7 +189,10 @@
             e.preventDefault();
             chartCard.classList.remove('dragover');
             const file = e.dataTransfer.files[0];
-            if (file) handleFile(file);
+            if (file) {
+                handleFile(file);
+                document.querySelector('.drop-hint').style.opacity = '0';
+            }
         });
 
         // 隐藏input的文件选择事件
