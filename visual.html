@@ -4,32 +4,6 @@
     <title>性能可视化</title>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
-        /* 悬停样式优化 */
-        .hoverlayer line {
-            stroke: #7CD0FF !important;
-            stroke-width: 1px !important;
-            filter: drop-shadow(0 0 3px rgba(124, 208, 255, 0.8)) !important;
-            fill: none !important;
-        }
-        .hoverlayer rect.bg {
-            stroke: none !important;
-            rx: 8px !important;  /* SVG圆角属性 */
-            filter: drop-shadow(0 2px 8px rgba(0,0,0,0.1)) !important;
-            fill: white !important;
-        }
-
-        /* 增强图例标题样式 */
-        .legendtitletext {
-            padding-top: 5px;
-            font-weight: 700 !important;
-            font-size: 15px !important;
-            font-family: 'Segoe UI' !important;
-        }
-        .legendtext {
-            font-size: 13px !important;
-        }
-
-        /* 保持原有样式不变 */
         body {
             font-family: 'Segoe UI', sans-serif;
             margin: 0;
@@ -50,13 +24,13 @@
             padding: 20px;
             flex-grow: 1;
         }
-        input[type="file"] {
-            margin: 20px 0;
-            padding: 12px;
-            background: #fff;
+        .chart-card {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .chart-card.dragover {
             border: 2px dashed #8aedc2;
-            border-radius: 8px;
-            width: 300px;
+            background-color: #f5fffb;
         }
         #charts-container {
             display: flex;
@@ -65,11 +39,59 @@
             height: 100%;
             padding: 10px;
         }
+        /* 悬停样式优化 */
+        .hoverlayer line {
+            stroke: #7CD0FF !important;
+            stroke-width: 1px !important;
+            filter: drop-shadow(0 0 3px rgba(124, 208, 255, 0.8)) !important;
+            fill: none !important;
+        }
+        .hoverlayer rect.bg {
+            stroke: none !important;
+            rx: 8px !important;
+            filter: drop-shadow(0 2px 8px rgba(0,0,0,0.1)) !important;
+            fill: white !important;
+        }
+
+        /* 更新下拉菜单项样式 */
+        .updatemenu-item-rect {
+            rx: 8 !important;
+            ry: 8 !important;
+            stroke: #e5e7eb !important;
+            stroke-width: 1px !important;
+            fill: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%) !important;
+            filter: drop-shadow(0 2px 6px rgba(0,0,0,0.05)) !important;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+
+        .updatemenu-item-text {
+            fill: #374151 !important;
+            font-family: 'Segoe UI' !important;
+            font-size: 13px !important;
+            font-weight: 500 !important;
+        }
+
+        .updatemenu-item-rect:hover {
+            fill: #f3f4f6 !important;
+            stroke: #d1d5db !important;
+            filter: drop-shadow(0 2px 8px rgba(0,0,0,0.1)) !important;
+        }
+
+        /* 增强图例标题样式 */
+        .legendtitletext {
+            padding-top: 5px;
+            font-weight: 700 !important;
+            font-size: 15px !important;
+            font-family: 'Segoe UI' !important;
+        }
+        .legendtext {
+            font-size: 13px !important;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <input type="file" id="dbFile" accept=".db,.sqlite">
+        <input type="file" id="hiddenFile" accept=".db,.sqlite" style="display: none">
         <div id="charts-container">
             <div class="chart-card" id="chart1"></div>
         </div>
@@ -82,9 +104,16 @@
             locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
         }).then(SQL => window.SQL = SQL);
 
-        document.getElementById('dbFile').addEventListener('change', async function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+        let chartCreated = false;
+        const chartCard = document.getElementById('chart1');
+        const hiddenInput = document.getElementById('hiddenFile');
+
+        // 统一文件处理函数
+        async function handleFile(file) {
+            if (!file.name.match(/\.(db|sqlite)$/)) {
+                alert('仅支持.db和.sqlite文件');
+                return;
+            }
 
             try {
                 const SQLInstance = await SQL;
@@ -93,7 +122,6 @@
                     const Uints = new Uint8Array(e.target.result);
                     const database = new SQLInstance.Database(Uints);
 
-                    Plotly.purge('chart1');
                     const perfData = database.exec(`
                         SELECT timestamp, threads_num, cpu_percent, memory_mb,
                                read_bytes, write_bytes, read_mbps, write_mbps
@@ -113,12 +141,45 @@
                         writeMbps: row[7],
                     }));
 
-                    createCharts(data);
+                    if (chartCreated) {
+                        Plotly.react('chart1', traces, layout);
+                    } else {
+                        createCharts(data);
+                        chartCreated = true;
+                    }
                 };
                 reader.readAsArrayBuffer(file);
             } catch (error) {
-                alert('数据库初始化失败: ' + error.message);
+                alert('文件处理失败: ' + error.message);
             }
+        }
+
+        // 点击卡片选择文件
+        chartCard.addEventListener('click', () => {
+            if (!chartCreated) hiddenInput.click();
+        });
+
+        // 拖拽事件处理
+        chartCard.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            chartCard.classList.add('dragover');
+        });
+
+        chartCard.addEventListener('dragleave', () => {
+            chartCard.classList.remove('dragover');
+        });
+
+        chartCard.addEventListener('drop', (e) => {
+            e.preventDefault();
+            chartCard.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) handleFile(file);
+        });
+
+        // 隐藏input的文件选择事件
+        hiddenInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) handleFile(file);
         });
 
         function createCharts(data) {
@@ -170,7 +231,6 @@
            const normByRange = (value, dataRange) => {
               return (value - dataRange[0]) / (dataRange[1] - dataRange[0]);
            };
-           console.log(ranges);
 
             const traces = [
                {
@@ -312,8 +372,8 @@
                    ],
                    active: 1,
                    showactive: true,
-                   x: 1.085,  // 将下拉菜单移到右侧
-                   xanchor: 'right',  // 右对齐
+                   x: 1.020,  // 将下拉菜单移到右侧
+                   xanchor: 'left',  // 右对齐
                    y: 0.75,  // 调整垂直位置到图例下方
                    yanchor: 'top'
                }]
