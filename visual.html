@@ -4,6 +4,31 @@
     <title>性能可视化</title>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
+        /* 悬停样式优化 */
+        .hoverlayer line {
+            stroke: #7CD0FF !important;
+            stroke-width: 1px !important;
+            filter: drop-shadow(0 0 3px rgba(124, 208, 255, 0.8)) !important;
+            fill: none !important;
+        }
+        .hoverlayer rect.bg {
+            stroke: none !important;
+            rx: 8px !important;  /* SVG圆角属性 */
+            filter: drop-shadow(0 2px 8px rgba(0,0,0,0.1)) !important;
+            fill: white !important;
+        }
+
+        /* 增强图例标题样式 */
+        .legendtitletext {
+            padding-top: 5px;
+            font-weight: 700 !important;
+            font-size: 15px !important;
+            font-family: 'Segoe UI' !important;
+        }
+        .legendtext {
+            font-size: 13px !important;
+        }
+
         /* 保持原有样式不变 */
         body {
             font-family: 'Segoe UI', sans-serif;
@@ -101,10 +126,23 @@
                 hovermode: 'x unified',
                 plot_bgcolor: '#f8f9fa',
                 paper_bgcolor: '#ffffff',
-                margin: {t: 30, r: 30, l: 50, b: 40},
+                margin: {t: 80, r: 30, l: 50, b: 40}, // 增加顶部间距容纳标题
                 font: {family: 'Segoe UI', size: 12},
+                title: {
+                    text: '性能指标趋势图',
+                    x: 0.05,
+                    y: 0.95,
+                    font: {size: 18}
+                },
                 xaxis: {showgrid: true, gridcolor: '#e5e7eb'},
-                yaxis: {showgrid: true, gridcolor: '#e5e7eb'}
+                yaxis: {
+                    showgrid: true,
+                    gridcolor: '#e5e7eb',
+                    title: {
+                        standoff: 20 // Y轴标题与轴的距离
+                    },
+                    ticklabelpadding: 10 // 刻度标签与轴线的距离
+                }
             };
 
             // 计算各参数范围
@@ -144,7 +182,7 @@
                    line: {color: '#6366f1'},
                    yaxis: 'y',
                    visible: true,
-                   hovertemplate: '线程数: %{customdata}<extra></extra>'
+                   hovertemplate: '线程数:  <b>%{customdata}</b><extra></extra>'
                },
                {
                    x: data.map(d => d.timestamp),
@@ -155,7 +193,7 @@
                    line: {color: '#10b981'},
                    yaxis: 'y',
                    visible: true,
-                   hovertemplate: 'CPU使用率(%): %{customdata}<extra></extra>'
+                   hovertemplate: 'CPU使用率(%):  <b>%{customdata}</b><extra></extra>'
                },
                {
                    x: data.map(d => d.timestamp),
@@ -166,7 +204,7 @@
                    line: {color: '#f59e0b'},
                    yaxis: 'y',
                    visible: true,
-                   hovertemplate: '内存使用量 (MB): %{customdata}<extra></extra>'
+                   hovertemplate: '内存使用量 (MB):  <b>%{customdata}</b><extra></extra>'
                },
                {
                    x: data.map(d => d.timestamp),
@@ -177,7 +215,7 @@
                    line: {color: '#3b82f6'},
                    yaxis: 'y',
                    visible: true,
-                   hovertemplate: '读取速度 (MB/s): %{customdata}<extra></extra>'
+                   hovertemplate: '读取速度 (MB/s):  <b>%{customdata}</b><extra></extra>'
                },
                {
                    x: data.map(d => d.timestamp),
@@ -188,7 +226,7 @@
                    line: {color: '#ef4444'},
                    yaxis: 'y',
                    visible: true,
-                   hovertemplate: '写入速度 (MB/s): %{customdata}<extra></extra>'
+                   hovertemplate: '写入速度 (MB/s):  <b>%{customdata}</b><extra></extra>'
                },
                {
                    x: data.map(d => d.timestamp),
@@ -199,7 +237,7 @@
                    line: {color: '#8b5cf6'},
                    yaxis: 'y',
                    visible: true,
-                   hovertemplate: '读取总量 (MB): %{customdata}<extra></extra>'
+                   hovertemplate: '读取总量 (MB):  <b>%{customdata}</b><extra></extra>'
                },
                {
                    x: data.map(d => d.timestamp),
@@ -210,14 +248,16 @@
                    line: {color: '#ec4899'},
                    yaxis: 'y',
                    visible: true,
-                   hovertemplate: '写入总量 (MB): %{customdata}<extra></extra>'
+                   hovertemplate: '写入总量 (MB):  <b>%{customdata}</b><extra></extra>'
                }
            ];
 
            const yaxisText = (range, fixed = 2) => {
                 return [
                     (range[0]).toFixed(fixed),
+                    ((range[0] + range[1])*0.25).toFixed(fixed),
                     ((range[0] + range[1])/2).toFixed(fixed),
+                    ((range[0] + range[1])*0.75).toFixed(fixed),
                     (range[1]).toFixed(fixed)]
            };
 
@@ -226,7 +266,7 @@
                yaxis: {
                    title: 'CPU使用率 (%)',
                    range: [0, 1],
-                   tickvals: [0, 0.5, 1],
+                   tickvals: [0, 0.25, 0.5, 0.75, 1],
                    ticktext: yaxisText(ranges.cpuUsage),
                    showgrid: true,
                    gridcolor: '#e5e7eb'
@@ -271,11 +311,10 @@
                        }
                    ],
                    active: 1,
-                   direction: 'down',
                    showactive: true,
-                   x: 0.1,
-                   xanchor: 'left',
-                   y: 1.1,
+                   x: 1.085,  // 将下拉菜单移到右侧
+                   xanchor: 'right',  // 右对齐
+                   y: 0.75,  // 调整垂直位置到图例下方
                    yanchor: 'top'
                }]
             });
