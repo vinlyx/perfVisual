@@ -145,7 +145,7 @@ class PerfVisual(object):
 
             # 运行环境信息
             os_version = platform.platform()
-            current_time = datetime.datetime.now()
+            exec_time = datetime.datetime.now()
             work_dir = os.getcwd()
 
             # 插入数据到systemInfo表
@@ -156,7 +156,7 @@ class PerfVisual(object):
                     total_memory, available_memory, used_memory,
                     memory_usage, disk_total,
                     disk_available, disk_used, os_version,
-                    command, current_time, work_dir
+                    command, exec_time, work_dir
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 cpu_model, cpu_cores, cpu_threads,
@@ -164,7 +164,7 @@ class PerfVisual(object):
                 total_memory, available_memory, used_memory,
                 memory_usage, disk_total,
                 disk_available, disk_used, os_version,
-                cmd, current_time, work_dir
+                cmd, exec_time, work_dir
             ))
             self.db.commit()
 
@@ -294,7 +294,7 @@ class PerfVisual(object):
                      disk_used INTEGER,
                      os_version TEXT,
                      command TEXT,
-                     current_time DATETIME,
+                     exec_time DATETIME,
                      work_dir TEXT)''')
 
         conn.commit()

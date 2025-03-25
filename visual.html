@@ -101,6 +101,35 @@
             font-size: 13px !important;
         }
     </style>
+    <style>
+        .system-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 2px solid #3b82f6;
+            border-radius: 8px;
+            overflow: hidden;
+            font-size: 14px;
+        }
+        .system-table th {
+            background: #f8fafc;
+            padding: 12px 15px;
+            border-bottom: 2px solid #e0f2fe;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .system-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #f1f5f9;
+            word-break: break-word;
+            max-width: 300px;
+        }
+        .system-table tr:hover {
+            background-color: #f0f9ff;
+        }
+        .system-table tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -110,6 +139,21 @@
                 <div class="drop-hint">点击选择或拖入SQLite数据库</div>
             </div>
         </div>
+    </div>
+
+    <div id="system-info" style="display: none; margin: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <table class="system-table">
+            <thead>
+                <tr>
+                    <th>字段名称</th>
+                    <th>数值</th>
+                    <th>字段名称</th>
+                    <th>数值</th>
+                </tr>
+            </thead>
+            <tbody id="system-info-body">
+            </tbody>
+        </table>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
@@ -144,6 +188,48 @@
                     `);
 
                     if (!perfData?.[0]?.values) throw new Error('数据库查询结果格式无效');
+
+                    // 查询系统信息表
+                    const systemInfo = database.exec(`
+                        SELECT cpu_model, cpu_cores, cpu_threads, cpu_base_freq, cpu_max_freq,
+                               total_memory, available_memory, used_memory, memory_usage,
+                               disk_total, disk_available, disk_used, os_version, command,
+                               exec_time, work_dir
+                        FROM systemInfo
+                    `);
+
+                    // 处理系统信息
+                    if (systemInfo?.[0]?.values?.[0]) {
+                        const sysData = systemInfo[0].values[0];
+                        const tbody = document.getElementById('system-info-body');
+                        tbody.innerHTML = '';
+
+                        // 分两列显示16个字段
+                        const fields = [
+                            ['记录时间', new Date(sysData[14]).toLocaleString(), '工作目录', sysData[15]],
+                            ['CPU型号', sysData[0], '系统版本', sysData[12]],
+                            ['物理核心', sysData[1], '逻辑线程', sysData[2]],
+                            ['基础频率', `${sysData[3]} GHz`, '最大频率', `${sysData[4]} GHz`],
+                            ['总内存', `${(sysData[5]/1073741824).toFixed(2)} GB`, '可用内存', `${(sysData[6]/1073741824).toFixed(2)} GB`],
+                            ['已用内存', `${(sysData[7]/1073741824).toFixed(2)} GB`, '内存使用率', `${sysData[8]}%`],
+                            ['磁盘总量', `${(sysData[9]/1073741824).toFixed(2)} GB`, '磁盘可用', `${(sysData[10]/1073741824).toFixed(2)} GB`],
+                            ['磁盘已用', `${(sysData[11]/1073741824).toFixed(2)} GB`, '执行命令', sysData[13]]
+
+                        ];
+
+                        fields.forEach(row => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td>${row[0]}</td>
+                                <td>${row[1]}</td>
+                                <td>${row[2]}</td>
+                                <td>${row[3]}</td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+
+                        document.getElementById('system-info').style.display = 'block';
+                    }
 
                     const data = perfData[0].values.map((row, index) => ({
                         timestamp: new Date(row[0]),
