@@ -145,9 +145,9 @@
         <table class="system-table">
             <thead>
                 <tr>
-                    <th>字段名称</th>
+                    <th>参数</th>
                     <th>数值</th>
-                    <th>字段名称</th>
+                    <th>参数</th>
                     <th>数值</th>
                 </tr>
             </thead>
@@ -189,6 +189,17 @@
 
                     if (!perfData?.[0]?.values) throw new Error('数据库查询结果格式无效');
 
+                    const data = perfData[0].values.map((row, index) => ({
+                        timestamp: new Date(row[0]),
+                        threadCount: row[1],
+                        cpuUsage: row[2],
+                        memoryUsage: row[3],
+                        readBytes: (row[4]/1048576).toFixed(2),
+                        writeBytes: (row[5]/1048576).toFixed(2),
+                        readMbps: row[6],
+                        writeMbps: row[7],
+                    }));
+
                     // 查询系统信息表
                     const systemInfo = database.exec(`
                         SELECT cpu_model, cpu_cores, cpu_threads, cpu_base_freq, cpu_max_freq,
@@ -205,16 +216,62 @@
                         tbody.innerHTML = '';
 
                         // 分两列显示16个字段
+                        // 计算新增统计指标
+                        const threadUtilization = data.length > 0 ?
+                            (data.reduce((sum, d) => sum + (d.cpuUsage / 100 / d.threadCount), 0) / data.length * 100).toFixed(2) + ' %' : 'N/A';
+
+                        const memoryPeak = data.length > 0 ?
+                            Math.max(...data.map(d => d.memoryUsage)).toFixed(2) + ' MB' : 'N/A';
+
+                        const avgReadSpeed = data.length > 0 ?
+                            (data.reduce((sum, d) => sum + d.readMbps, 0) / data.length).toFixed(2) + ' MB/s' : 'N/A';
+
+                        const avgWriteSpeed = data.length > 0 ?
+                            (data.reduce((sum, d) => sum + d.writeMbps, 0) / data.length).toFixed(2) + ' MB/s' : 'N/A';
+
+                        // 计算运行时长
+                        const startTime = data[0]?.timestamp;
+                        const endTime = data[data.length - 1]?.timestamp;
+                        let durationStr = 'N/A';
+                        if (startTime && endTime) {
+                            const diff = endTime - startTime;
+                            const seconds = Math.floor(diff / 1000);
+                            const hours = Math.floor(seconds / 3600);
+                            const minutes = Math.floor((seconds % 3600) / 60);
+                            const secs = seconds % 60;
+                            durationStr = `${hours}时 ${minutes}分 ${secs}秒 (${seconds}秒)`;
+                        }
+
+                        // 格式化字节大小为易读格式
+                        function formatBytes(bytes) {
+                            if (bytes >= 1073741824) {
+                                return (bytes / 1073741824).toFixed(2) + ' GB';
+                            } else if (bytes >= 1048576) {
+                                return (bytes / 1048576).toFixed(2) + ' MB';
+                            } else if (bytes >= 1024) {
+                                return (bytes / 1024).toFixed(2) + ' KB';
+                            } else {
+                                return bytes + ' B';
+                            }
+                        }
+
+                        // 获取总读取量和总写入量(转换为字节)
+                        const totalReadBytes = data.length > 0 ? data[data.length - 1].readBytes * 1048576 : 0;
+                        const totalWriteBytes = data.length > 0 ? data[data.length - 1].writeBytes * 1048576 : 0;
+
                         const fields = [
-                            ['记录时间', new Date(sysData[14]).toLocaleString(), '工作目录', sysData[15]],
+                            ['记录时间', new Date(sysData[14]).toLocaleString(), '运行时长', durationStr],
+                            ['线程利用率', threadUtilization, '内存峰值', memoryPeak],
+                            ['平均读取速度', avgReadSpeed, '平均写入速度', avgWriteSpeed],
+                            ['总读取量', formatBytes(totalReadBytes), '总写入量', formatBytes(totalWriteBytes)],
                             ['CPU型号', sysData[0], '系统版本', sysData[12]],
                             ['物理核心', sysData[1], '逻辑线程', sysData[2]],
                             ['基础频率', `${sysData[3]} GHz`, '最大频率', `${sysData[4]} GHz`],
                             ['总内存', `${(sysData[5]/1073741824).toFixed(2)} GB`, '可用内存', `${(sysData[6]/1073741824).toFixed(2)} GB`],
-                            ['已用内存', `${(sysData[7]/1073741824).toFixed(2)} GB`, '内存使用率', `${sysData[8]}%`],
+                            ['已用内存', `${(sysData[7]/1073741824).toFixed(2)} GB`, '内存使用率', `${sysData[8]} %`],
                             ['磁盘总量', `${(sysData[9]/1073741824).toFixed(2)} GB`, '磁盘可用', `${(sysData[10]/1073741824).toFixed(2)} GB`],
-                            ['磁盘已用', `${(sysData[11]/1073741824).toFixed(2)} GB`, '执行命令', sysData[13]]
-
+                            ['磁盘已用', `${(sysData[11]/1073741824).toFixed(2)} GB`, '磁盘可用率',  `${(sysData[10]/sysData[9]*100).toFixed(2)} %`],
+                            ['工作目录', sysData[15], '执行命令', sysData[13]]
                         ];
 
                         fields.forEach(row => {
@@ -230,17 +287,6 @@
 
                         document.getElementById('system-info').style.display = 'block';
                     }
-
-                    const data = perfData[0].values.map((row, index) => ({
-                        timestamp: new Date(row[0]),
-                        threadCount: row[1],
-                        cpuUsage: row[2],
-                        memoryUsage: row[3],
-                        readBytes: (row[4]/1048576).toFixed(2),
-                        writeBytes: (row[5]/1048576).toFixed(2),
-                        readMbps: row[6],
-                        writeMbps: row[7],
-                    }));
 
                     if (chartCreated) {
                         Plotly.react('chart1', traces, layout);

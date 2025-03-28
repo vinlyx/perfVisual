@@ -208,16 +208,27 @@ class PerfVisual(object):
         ## shell=True, here use .split to convert cmdline into a list
         ## This method may cause unexpected issues.
         proc = subprocess.Popen(cmd.split(), shell=False)
-        self.lastTime = datetime.datetime.now()
+        pm = ProcessMonitor(proc.pid)
+
+        # 第一次采样只记录初始值，不计算速度
+        first_rec = pm.record()
+        self.lastRd = first_rec[4].read_bytes
+        self.lastWt = first_rec[4].write_bytes
+        self.lastTime = first_rec[0]
         pt = self.lastTime
         print("Date\tCPU%\tMemoryMB\tReadMBps\tWriteMBps")
-        pm = ProcessMonitor(proc.pid)
 
         while proc.poll() is None:
             rec = pm.record()
             itv = (rec[0] - self.lastTime).total_seconds()
-            rdSpd = self.calSpdMB(rec[4].read_bytes - self.lastRd, itv)
-            wtSpd = self.calSpdMB(rec[4].write_bytes - self.lastWt, itv)
+
+            # 只有时间间隔大于0才计算速度
+            if itv > 0:
+                rdSpd = self.calSpdMB(rec[4].read_bytes - self.lastRd, itv)
+                wtSpd = self.calSpdMB(rec[4].write_bytes - self.lastWt, itv)
+            else:
+                rdSpd = 0.0
+                wtSpd = 0.0
 
             if (rec[0] - pt).total_seconds() > 5:
                 print(f"{rec[0]}\t{rec[2]}%\t{rec[3]}",
