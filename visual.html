@@ -158,14 +158,83 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
     <script>
-        let inSync = false;
-        initSqlJs({
-            locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
-        }).then(SQL => window.SQL = SQL);
-
         let chartCreated = false;
         const chartCard = document.getElementById('chart1');
         const hiddenInput = document.getElementById('hiddenFile');
+
+        // 初始化SQL.js并设置全局SQL变量
+        const initSQL = async () => {
+            if (!window.SQL) {
+                window.SQL = await initSqlJs({
+                    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+                });
+            }
+            return window.SQL;
+        };
+
+        // 立即开始初始化SQL.js
+        initSQL().catch(err => {
+            console.error('SQL.js初始化失败:', err);
+        });
+
+        let embedDB = null;
+        let embedFn = null;
+
+        // Base64转Uint8Array
+        function base64ToUint8Array(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        // 加载嵌入数据库
+        async function loadEmbeddedDB() {
+            if (!embedDB) return;
+
+            try {
+                const SQLInstance = await initSQL();
+                const Uints = base64ToUint8Array(embedDB);
+                const database = new SQLInstance.Database(Uints);
+
+                // 复用handleFile中的数据处理逻辑
+                const perfData = database.exec(`
+                    SELECT timestamp, threads_num, cpu_percent, memory_mb,
+                           read_bytes, write_bytes, read_mbps, write_mbps
+                    FROM process_stats
+                `);
+
+                if (!perfData?.[0]?.values) throw new Error('数据库查询结果格式无效');
+
+                const data = perfData[0].values.map((row, index) => ({
+                    timestamp: new Date(row[0]),
+                    threadCount: row[1],
+                    cpuUsage: row[2],
+                    memoryUsage: row[3],
+                    readBytes: (row[4]/1048576).toFixed(2),
+                    writeBytes: (row[5]/1048576).toFixed(2),
+                    readMbps: row[6],
+                    writeMbps: row[7],
+                }));
+
+                createCharts(data, embedFn);
+                document.querySelector('.drop-hint').style.opacity = '0';
+                chartCreated = true;
+            } catch (error) {
+                console.error('加载嵌入数据库失败:', error);
+                alert('加载嵌入数据库失败: ' + error.message);
+            }
+        }
+
+        // 页面加载完成后检查embedDB
+        document.addEventListener('DOMContentLoaded', () => {
+            if (embedDB) {
+                loadEmbeddedDB();
+            }
+        });
 
         // 统一文件处理函数
         async function handleFile(file) {
@@ -291,7 +360,7 @@
                     if (chartCreated) {
                         Plotly.react('chart1', traces, layout);
                     } else {
-                        createCharts(data);
+                        createCharts(data, file.name);
                         document.querySelector('.drop-hint').style.opacity = '0';
                         chartCreated = true;
                     }
@@ -333,7 +402,7 @@
             if (file) handleFile(file);
         });
 
-        function createCharts(data) {
+        function createCharts(data, filename) {
             const layout = {
                 hovermode: 'x unified',
                 plot_bgcolor: '#f8f9fa',
@@ -341,7 +410,7 @@
                 margin: {t: 80, r: 30, l: 50, b: 40}, // 增加顶部间距容纳标题
                 font: {family: 'Segoe UI', size: 12},
                 title: {
-                    text: '性能指标趋势图',
+                    text: filename,
                     x: 0.05,
                     y: 0.95,
                     font: {size: 18}
