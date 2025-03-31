@@ -24,16 +24,18 @@
 | cpu_threads      | INTEGER     | CPU逻辑线程数                 | 个        |
 | cpu_base_freq    | FLOAT       | CPU基础频率                   | GHz       |
 | cpu_max_freq     | FLOAT       | CPU最大频率                   | GHz       |
+| cpu_cache_size   | TEXT        | CPU缓存大小                   | -         |
 | total_memory     | INTEGER     | 系统总内存                    | 字节      |
 | available_memory | INTEGER     | 系统可用内存                  | 字节      |
 | used_memory      | INTEGER     | 系统已用内存                  | 字节      |
 | memory_usage     | FLOAT       | 内存使用率                    | 百分比    |
+| disk_type        | TEXT        | 磁盘类型                      | -         |
 | disk_total       | INTEGER     | 磁盘总容量                    | 字节      |
 | disk_available   | INTEGER     | 磁盘可用容量                  | 字节      |
 | disk_used        | INTEGER     | 磁盘已用容量                  | 字节      |
 | os_version       | TEXT        | 操作系统版本                  | -         |
 | command          | TEXT        | 执行命令                      | -         |
-| current_time     | DATETIME    | 当前时间                      | 本地时间  |
+| exec_time        | DATETIME    | 执行开始时间                  | 本地时间  |
 | work_dir         | TEXT        | 当前工作目录                  | -         |
 
 ## 数据采集说明

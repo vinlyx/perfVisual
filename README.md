@@ -11,11 +11,25 @@
 - 支持自定义监控间隔（毫秒级精度）
 - 提供命令行界面和程序API两种使用方式
 - 生成可直接导入分析工具的结构化数据
+- 内置数据可视化功能（通过visual.html）
 - 监控指标包括：
   - CPU使用率
   - 内存占用
   - 磁盘I/O速度
   - 线程数量
+
+## 项目结构
+
+```
+.
+├── perfvisual/              # 核心功能模块
+│   ├── perfvisual.py        # 主监控程序
+│   └── embedding.py         # 辅助功能模块
+├── visual.html              # 数据可视化界面
+├── dbFormat.md              # 数据库结构文档
+├── LICENSE                  # 许可证文件
+└── README.md                # 项目说明文档
+```
 
 ## 安装要求
 
@@ -42,6 +56,12 @@ pip install psutil
 ```bash
 ./perfvisual.py --interval 500 "java -jar myapp.jar" | tee log.txt
 ```
+
+### 可视化数据
+
+1. 运行监控程序生成数据文件
+2. 打开visual.html加载数据文件
+3. 交互式查看资源使用曲线
 
 ### 参数说明
 
@@ -71,6 +91,8 @@ pip install psutil
 
 ## 开发API
 
+### 基本监控
+
 ```python
 from perfvisual import PerfVisual
 
@@ -81,17 +103,28 @@ pv = PerfVisual(intervalMs=500)  # 500ms采样间隔
 pv.exec("python3 my_script.py", recordDB="performance.db")
 ```
 
+### 高级用法
+
+```python
+# 自定义回调处理监控数据
+def on_sample(data):
+    print(f"CPU: {data['cpu_percent']}%")
+
+pv = PerfVisual(intervalMs=200)
+pv.set_callback(on_sample)
+pv.exec("node server.js")
+```
+
 ## 数据库结构
 
 详细数据库格式请参考[dbFormat.md](dbFormat.md)
 
-## 版本信息
 
-当前版本：0.1.0
-最后更新：2025-03-25
+## 问题反馈
+
+遇到问题请提交至：[Issues页面](https://github.com/your-repo/issues)
 
 
 ## 许可证
 
 本项目采用 [MIT License](LICENSE)
-
