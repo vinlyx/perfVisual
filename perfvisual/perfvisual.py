@@ -111,6 +111,10 @@ class PerfVisual(object):
             上次写入字节数，用于计算IO速度
         lastTime : datetime
             上次采样时间戳
+        buffer : list
+            数据缓冲区，用于批量写入
+        buffer_size : int
+            缓冲区大小，达到此数量时触发写入
         """
         super().__init__()
         self.intervalMs = intervalMs
@@ -118,6 +122,8 @@ class PerfVisual(object):
         self.lastRd = 0
         self.lastWt = 0
         self.lastTime = None
+        self.buffer = []
+        self.buffer_size = 100  # 每100条记录写入一次
 
     def collectSysInfo(self, cmd):
         """收集系统信息并插入到数据库"""
@@ -235,13 +241,17 @@ class PerfVisual(object):
                       f"{rdSpd}\t{wtSpd}", sep="\t")
                 pt = rec[0]
 
-            self.updateDB(*rec[:4],
-                          rec[4].read_count,
-                          rec[4].write_count,
-                          rec[4].read_bytes,
-                          rec[4].write_bytes,
-                          rdSpd,
-                          wtSpd)
+            # 收集监控数据到缓冲区
+            self.updateDB(rec[0],  # timestamp
+                         rec[1],   # threads_num
+                         rec[2],   # cpu_percent
+                         rec[3],   # memory_mb
+                         rec[4].read_count,
+                         rec[4].write_count,
+                         rec[4].read_bytes,
+                         rec[4].write_bytes,
+                         rdSpd,
+                         wtSpd)
 
             self.lastRd = rec[4].read_bytes
             self.lastWt = rec[4].write_bytes
@@ -249,6 +259,12 @@ class PerfVisual(object):
 
             time.sleep(self.intervalMs / 1000.0)
 
+        # 确保所有缓冲数据写入数据库
+        if self.buffer:
+            self.db.executemany('''INSERT INTO process_stats VALUES
+                                  (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                              self.buffer)
+            self.db.commit()
         self.db.close()
 
     def initDB(self, dbName: str=None):
@@ -317,10 +333,27 @@ class PerfVisual(object):
         return conn
 
     def updateDB(self, *info):
-        self.db.execute('''INSERT INTO process_stats VALUES
-                           (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                        info)
-        self.db.commit()
+        """更新数据库，支持批量插入
+
+        参数：
+        *info : tuple
+            单条记录的数据，格式为：
+            (timestamp, threads_num, cpu_percent, memory_mb,
+             read_count, write_count, read_bytes, write_bytes,
+             read_mbps, write_mbps)
+
+        功能：
+        1. 将记录添加到缓冲区
+        2. 当缓冲区达到buffer_size时执行批量插入
+        3. 清空缓冲区
+        """
+        self.buffer.append(info)
+        if len(self.buffer) >= self.buffer_size:
+            self.db.executemany('''INSERT INTO process_stats VALUES
+                                  (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                              self.buffer)
+            self.db.commit()
+            self.buffer.clear()
 
     def calSpdMB(self, byte: int, intervalSec: float) -> float:
         """计算每秒兆字节数

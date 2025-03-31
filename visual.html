@@ -365,13 +365,9 @@
                     // 处理系统信息
                     processSystemInfo(database, data);
 
-                    if (chartCreated) {
-                        Plotly.react('chart1', traces, layout);
-                    } else {
-                        createCharts(data, file.name);
-                        document.querySelector('.drop-hint').style.opacity = '0';
-                        chartCreated = true;
-                    }
+                    createCharts(data, file.name);
+                    document.querySelector('.drop-hint').style.opacity = '0';
+                    chartCreated = true;
                 };
                 reader.readAsArrayBuffer(file);
             } catch (error) {
@@ -438,12 +434,16 @@
             const calcRange = (values, bufferPercent = 5) => {
                 const max = Math.max(...values);
                 const min = Math.min(...values);
+                // 当所有值相同时，设置默认范围
+                if (max === min) {
+                    return [Math.max(0, min - 1), min + 1];
+                }
                 return [Math.max(0, min - (max - min)*bufferPercent/100), max + (max - min)*bufferPercent/100];
             };
 
             // 获取各参数范围
            const ranges = {
-               threadCount: calcRange(data.map(d => d.threadCount), 30),
+               threadCount: calcRange(data.map(d => d.threadCount)),
                cpuUsage: calcRange(data.map(d => d.cpuUsage)),
                memoryUsage: calcRange(data.map(d => d.memoryUsage)),
                readMbps: calcRange(data.map(d => d.readMbps)),
