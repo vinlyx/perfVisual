@@ -74,6 +74,7 @@ pip install psutil
 参数说明：
 - `visual.html`: 原始可视化HTML模板文件
 - `performance.db`: 监控生成的SQLite数据库文件
+
 输出：
 - `database_visual.html`: 输出文件（自动生成带数据库前缀）
 
