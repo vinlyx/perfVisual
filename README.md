@@ -63,6 +63,20 @@ pip install psutil
 2. 打开visual.html加载数据文件
 3. 交互式查看资源使用曲线
 
+### 数据库嵌入HTML
+
+将监控生成的SQLite数据库嵌入到HTML可视化文件中：
+
+```bash
+./perfvisual/embedding.py visual.html performance.db
+```
+
+参数说明：
+- `visual.html`: 原始可视化HTML模板文件
+- `performance.db`: 监控生成的SQLite数据库文件
+输出：
+- `database_visual.html`: 输出文件（自动生成带数据库前缀）
+
 ### 参数说明
 
 | 参数 | 描述 |
