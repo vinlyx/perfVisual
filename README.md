@@ -18,6 +18,10 @@
   - 磁盘I/O速度
   - 线程数量
 
+## 可视化示例
+![Performance Visualize Example](example.png)
+
+
 ## 项目结构
 
 ```
